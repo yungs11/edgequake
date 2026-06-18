@@ -38,6 +38,7 @@
 //! - [`text_utils`]: String splitting, UTF-8 boundary, sentence detection utilities
 //! - `strategies`: Chunking strategy implementations (token, character, sentence, paragraph)
 
+pub mod adaptive_strategy;
 mod strategies;
 pub mod text_utils;
 mod types;
@@ -56,6 +57,9 @@ pub use text_utils::calculate_line_numbers;
 pub use strategies::{
     CharacterBasedChunking, ParagraphBoundaryChunking, SentenceBoundaryChunking, TokenBasedChunking,
 };
+
+// Re-export the adaptive_chunk-backed strategy (W1)
+pub use adaptive_strategy::AdaptiveChunkStrategy;
 
 /// Text chunker for splitting documents.
 pub struct Chunker {
