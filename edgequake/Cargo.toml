@@ -13,6 +13,10 @@ members = [
     "crates/edgequake-storage",
     "crates/edgequake-tasks",
 ]
+# Vendored, patched copy of the crates.io `edgequake-llm` dependency (see
+# [patch.crates-io] below). Excluded so its examples/tests are not pulled into
+# the workspace build graph — only its lib target is consumed via the patch.
+exclude = ["vendor/edgequake-llm"]
 
 [package]
 name = "edgequake"
@@ -166,6 +170,12 @@ argon2 = "0.5"
 password-hash = "0.5"
 jsonwebtoken = "9.3"
 rand = "0.9"
+
+# Patch the crates.io `edgequake-llm` with a locally vendored copy that adds
+# OpenAIProvider::with_embedding_dimension, so EDGEQUAKE_EMBEDDING_DIMENSION is
+# actually applied (BGE-M3 / KURE = 1024d) instead of defaulting to 1536.
+[patch.crates-io]
+edgequake-llm = { path = "vendor/edgequake-llm" }
 
 [profile.release]
 lto = "thin"

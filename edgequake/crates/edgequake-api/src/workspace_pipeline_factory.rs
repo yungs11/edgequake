@@ -89,11 +89,25 @@ impl WorkspacePipelineFactory {
                         &ws.metadata,
                     );
                 let extractor = Arc::new(LLMExtractor::new(llm).with_entity_schema(entity_schema));
-                Ok(Arc::new(
-                    Pipeline::default_pipeline()
-                        .with_extractor(extractor)
-                        .with_embedding_provider(embedding),
-                ))
+                let mut pipeline = Pipeline::default_pipeline()
+                    .with_extractor(extractor)
+                    .with_embedding_provider(embedding);
+
+                // W1: opt-in adaptive chunking via the adaptive_chunk service.
+                // Default (flag unset) keeps the built-in token chunker byte-for-byte.
+                // Applied AFTER with_embedding_provider so the embedding cap path
+                // (which rebuilds the chunker) cannot clobber the strategy.
+                if std::env::var("EDGEQUAKE_CHUNKER").as_deref() == Ok("adaptive") {
+                    info!(
+                        workspace_id = workspace_id,
+                        "EDGEQUAKE_CHUNKER=adaptive: using AdaptiveChunkStrategy"
+                    );
+                    pipeline = pipeline.with_chunking_strategy(Arc::new(
+                        edgequake_pipeline::AdaptiveChunkStrategy::from_env(),
+                    ));
+                }
+
+                Ok(Arc::new(pipeline))
             }
             (Err(llm_err), Ok(_)) => {
                 error!(

@@ -77,8 +77,8 @@ pub use cache::{
     CachedExtractor, LLMCache, MemoryLLMCache,
 };
 pub use chunker::{
-    calculate_line_numbers, CharacterBasedChunking, ChunkResult, Chunker, ChunkerConfig,
-    ChunkingStrategy, ParagraphBoundaryChunking, SentenceBoundaryChunking, TextChunk,
+    calculate_line_numbers, AdaptiveChunkStrategy, CharacterBasedChunking, ChunkResult, Chunker,
+    ChunkerConfig, ChunkingStrategy, ParagraphBoundaryChunking, SentenceBoundaryChunking, TextChunk,
     TokenBasedChunking,
 };
 pub use error::{

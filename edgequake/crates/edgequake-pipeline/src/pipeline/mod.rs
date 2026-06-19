@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use edgequake_llm::traits::EmbeddingProvider;
 
-use crate::chunker::Chunker;
+use crate::chunker::{Chunker, ChunkingStrategy};
 use crate::extractor::EntityExtractor;
 
 pub use config::{
@@ -62,6 +62,20 @@ impl Pipeline {
     /// Create a pipeline with default configuration, honouring environment variables.
     pub fn default_pipeline() -> Self {
         Self::new(PipelineConfig::from_env())
+    }
+
+    /// Replace the pipeline's chunker with one driven by a custom
+    /// [`ChunkingStrategy`] (W1: `AdaptiveChunkStrategy`).
+    ///
+    /// The strategy reuses the pipeline's current `chunker` config so that any
+    /// embedding-driven `chunk_size` capping applied by
+    /// [`with_embedding_provider`](Self::with_embedding_provider) is preserved.
+    /// (The adaptive strategy ignores token-target config and slices text via
+    /// the `adaptive_chunk` service, but the config is threaded through for
+    /// consistency with the trait contract.)
+    pub fn with_chunking_strategy(mut self, strategy: Arc<dyn ChunkingStrategy>) -> Self {
+        self.chunker = Chunker::with_strategy(self.config.chunker.clone(), strategy);
+        self
     }
 
     /// Set the entity extractor.

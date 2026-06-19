@@ -77,12 +77,27 @@ pub fn resolve_embedding_provider(
                     .unwrap_or_default();
                 let base_url = embed_base_url.or_else(|| std::env::var("OPENAI_BASE_URL").ok());
 
+                // WHY: OpenAI-compatible servers (e.g. BGE-M3, KURE → 1024d) host models
+                // whose names are unknown to OpenAIProvider's dimension table, which
+                // defaults to 1536. When EDGEQUAKE_EMBEDDING_DIMENSION is set we must
+                // APPLY it so dimension() (used by postgres.rs to provision the pgvector
+                // column) returns the real width — not just log it.
+                let dimension_override = std::env::var("EDGEQUAKE_EMBEDDING_DIMENSION")
+                    .ok()
+                    .and_then(|d| d.parse::<usize>().ok());
+
+                let build_provider = |p: OpenAIProvider| -> OpenAIProvider {
+                    let p = p.with_embedding_model(&model);
+                    match dimension_override {
+                        Some(dim) => p.with_embedding_dimension(dim),
+                        None => p,
+                    }
+                };
+
                 let provider: Arc<dyn EmbeddingProvider> = if let Some(base_url) = base_url {
-                    Arc::new(
-                        OpenAIProvider::compatible(api_key, base_url).with_embedding_model(&model),
-                    )
+                    Arc::new(build_provider(OpenAIProvider::compatible(api_key, base_url)))
                 } else {
-                    Arc::new(OpenAIProvider::new(api_key).with_embedding_model(&model))
+                    Arc::new(build_provider(OpenAIProvider::new(api_key)))
                 };
 
                 tracing::info!(
