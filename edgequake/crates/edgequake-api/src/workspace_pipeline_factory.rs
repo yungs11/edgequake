@@ -97,14 +97,28 @@ impl WorkspacePipelineFactory {
                 // Default (flag unset) keeps the built-in token chunker byte-for-byte.
                 // Applied AFTER with_embedding_provider so the embedding cap path
                 // (which rebuilds the chunker) cannot clobber the strategy.
-                if std::env::var("EDGEQUAKE_CHUNKER").as_deref() == Ok("adaptive") {
-                    info!(
-                        workspace_id = workspace_id,
-                        "EDGEQUAKE_CHUNKER=adaptive: using AdaptiveChunkStrategy"
-                    );
-                    pipeline = pipeline.with_chunking_strategy(Arc::new(
-                        edgequake_pipeline::AdaptiveChunkStrategy::from_env(),
-                    ));
+                match std::env::var("EDGEQUAKE_CHUNKER").as_deref() {
+                    Ok("adaptive") => {
+                        info!(
+                            workspace_id = workspace_id,
+                            "EDGEQUAKE_CHUNKER=adaptive: using AdaptiveChunkStrategy"
+                        );
+                        pipeline = pipeline.with_chunking_strategy(Arc::new(
+                            edgequake_pipeline::AdaptiveChunkStrategy::from_env(),
+                        ));
+                    }
+                    // kb-pipeline facade pre-chunks upstream and joins on U+001E;
+                    // edgequake stores those chunks verbatim (SoT §6).
+                    Ok("passthrough") => {
+                        info!(
+                            workspace_id = workspace_id,
+                            "EDGEQUAKE_CHUNKER=passthrough: using PassthroughStrategy"
+                        );
+                        pipeline = pipeline.with_chunking_strategy(Arc::new(
+                            edgequake_pipeline::PassthroughStrategy,
+                        ));
+                    }
+                    _ => {}
                 }
 
                 Ok(Arc::new(pipeline))

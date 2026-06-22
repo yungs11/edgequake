@@ -39,6 +39,7 @@
 //! - `strategies`: Chunking strategy implementations (token, character, sentence, paragraph)
 
 pub mod adaptive_strategy;
+mod passthrough;
 mod strategies;
 pub mod text_utils;
 mod types;
@@ -60,6 +61,9 @@ pub use strategies::{
 
 // Re-export the adaptive_chunk-backed strategy (W1)
 pub use adaptive_strategy::AdaptiveChunkStrategy;
+
+// Re-export the passthrough strategy (kb-pipeline facade, SoT §6)
+pub use passthrough::PassthroughStrategy;
 
 /// Text chunker for splitting documents.
 pub struct Chunker {

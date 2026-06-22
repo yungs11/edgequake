@@ -78,8 +78,8 @@ pub use cache::{
 };
 pub use chunker::{
     calculate_line_numbers, AdaptiveChunkStrategy, CharacterBasedChunking, ChunkResult, Chunker,
-    ChunkerConfig, ChunkingStrategy, ParagraphBoundaryChunking, SentenceBoundaryChunking, TextChunk,
-    TokenBasedChunking,
+    ChunkerConfig, ChunkingStrategy, ParagraphBoundaryChunking, PassthroughStrategy,
+    SentenceBoundaryChunking, TextChunk, TokenBasedChunking,
 };
 pub use error::{
     ChunkExtractionOutcome, ChunkFailure, PipelineError, ResilientExtractionResult, Result,
