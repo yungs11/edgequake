@@ -46,6 +46,15 @@ pub struct DocumentDetailResponse {
     /// Document processing status.
     pub status: String,
 
+    /// Live granular processing sub-stage from KV metadata (extracting/embedding/…).
+    /// Surfaced for per-phase monitoring; None when not mid-processing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_stage: Option<String>,
+
+    /// Human-readable progress for the current sub-stage (e.g. "Embedding 3/10").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage_message: Option<String>,
+
     /// Error message if processing failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,

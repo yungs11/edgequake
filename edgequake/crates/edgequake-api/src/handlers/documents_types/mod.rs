@@ -221,6 +221,8 @@ mod tests {
             lineage: None,
             metadata: None,
             pdf_id: None,
+            current_stage: None,
+            stage_message: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();

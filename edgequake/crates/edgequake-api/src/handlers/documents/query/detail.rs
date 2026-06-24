@@ -245,6 +245,8 @@ pub async fn get_document(
         lineage,
         custom_metadata,
         pdf_id,
+        current_stage,
+        stage_message,
     ) = if let Some(obj) = meta_obj {
         // Build lineage information from stored metadata
         let lineage = {
@@ -430,6 +432,13 @@ pub async fn get_document(
             obj.get("pdf_id")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string()),
+            // Live per-phase monitoring: surface granular sub-stage from KV metadata.
+            obj.get("current_stage")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            obj.get("stage_message")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         )
     } else {
         // Fallback for documents without metadata (legacy)
@@ -455,6 +464,8 @@ pub async fn get_document(
             None,                    // lineage
             None,                    // custom_metadata
             None,                    // pdf_id
+            None,                    // current_stage
+            None,                    // stage_message
         )
     };
 
@@ -496,5 +507,7 @@ pub async fn get_document(
         metadata: custom_metadata,
         // OODA-50: Use pdf_id from metadata for PDF viewer
         pdf_id,
+        current_stage,
+        stage_message,
     }))
 }
