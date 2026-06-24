@@ -93,6 +93,12 @@ struct ChatRequest<'a> {
     /// Use `None` to omit the field entirely (default behaviour).
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    /// OpenRouter unified reasoning control. When `reasoning_effort` is "none" we
+    /// ALSO emit `{"enabled": false}` here because some providers (notably qwen on
+    /// OpenRouter) ignore `reasoning_effort` and only honor this unified object —
+    /// without it they keep doing chain-of-thought (slow entity extraction).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<serde_json::Value>,
     /// Mistral-specific: inject safety system prompt before all conversations.
     /// Silently ignored by non-Mistral providers.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,6 +108,17 @@ struct ChatRequest<'a> {
     /// `false` = force single tool-call mode.
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+}
+
+/// Map `reasoning_effort` to the OpenRouter unified `reasoning` object.
+/// `Some("none")` → `{"enabled": false}` (the effective off-switch for models like
+/// qwen that ignore `reasoning_effort`); anything else → `None` (field omitted, so
+/// the model's default reasoning behaviour is unchanged).
+fn openrouter_reasoning_from_effort(effort: Option<&str>) -> Option<serde_json::Value> {
+    match effort {
+        Some("none") => Some(serde_json::json!({ "enabled": false })),
+        _ => None,
+    }
 }
 
 /// Options for streaming responses — enables usage stats in the final SSE chunk.
@@ -901,6 +918,7 @@ impl LLMProvider for OpenAICompatibleProvider {
                 None
             },
             reasoning_effort: options.reasoning_effort.clone(),
+            reasoning: openrouter_reasoning_from_effort(options.reasoning_effort.as_deref()),
             safe_prompt: options.safe_prompt,
             parallel_tool_calls: None,
         };
@@ -1028,6 +1046,7 @@ impl LLMProvider for OpenAICompatibleProvider {
             },
             response_format: None,
             reasoning_effort: None,
+            reasoning: None,
             safe_prompt: None,
             parallel_tool_calls: options.parallel_tool_calls,
         };
@@ -1173,6 +1192,7 @@ impl LLMProvider for OpenAICompatibleProvider {
             thinking: None,
             response_format: None,
             reasoning_effort: None,
+            reasoning: None,
             safe_prompt: None,
             parallel_tool_calls: None,
         };
@@ -1361,6 +1381,7 @@ impl LLMProvider for OpenAICompatibleProvider {
             },
             response_format: None,
             reasoning_effort: options.reasoning_effort.clone(),
+            reasoning: openrouter_reasoning_from_effort(options.reasoning_effort.as_deref()),
             safe_prompt: options.safe_prompt,
             parallel_tool_calls: options.parallel_tool_calls,
         };
@@ -2137,6 +2158,7 @@ mod tests {
             response_format: None,
             thinking: None,
             reasoning_effort: Some("high".to_string()),
+            reasoning: None,
             seed: None,
             frequency_penalty: None,
             presence_penalty: None,
@@ -2166,6 +2188,7 @@ mod tests {
             response_format: None,
             thinking: None,
             reasoning_effort: None,
+            reasoning: None,
             seed: None,
             frequency_penalty: None,
             presence_penalty: None,
