@@ -7,11 +7,13 @@
 //! | `search`    | Label + node search with neighbors       | —               |
 //! | `popular`   | Popular labels + batch degree query      | —               |
 
+mod document_graph;
 mod node;
 mod popular;
 mod search;
 mod traversal;
 
+pub use document_graph::*;
 pub use node::*;
 pub use popular::*;
 pub use search::*;

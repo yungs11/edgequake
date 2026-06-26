@@ -28,6 +28,7 @@ use crate::handlers;
         handlers::execute_query,
         handlers::stream_query,
         handlers::get_graph,
+        handlers::get_document_graph,
         handlers::stream_graph,
         handlers::get_node,
         handlers::search_labels,

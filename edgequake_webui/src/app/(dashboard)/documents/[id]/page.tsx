@@ -1,6 +1,7 @@
 'use client';
 
 import { ContentRenderer } from '@/components/document/content-renderer';
+import { DocumentGraphPanel } from '@/components/document/document-graph-panel';
 import { MetadataSidebar } from '@/components/document/metadata-sidebar';
 import { PDFViewer } from '@/components/documents/pdf-viewer';
 import { SideBySideViewer } from '@/components/documents/side-by-side-viewer';
@@ -226,7 +227,7 @@ export default function DocumentViewPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-y-auto">
       {/* Minimal Header */}
       <header className="shrink-0 border-b bg-background">
         <div className="flex items-center justify-between px-3 py-2">
@@ -299,7 +300,7 @@ export default function DocumentViewPage() {
       </header>
 
       {/* Main Content Area - Two Column Layout */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* OODA-43: Desktop layout with PDF side-by-side support */}
         <div className="hidden lg:flex flex-1 overflow-hidden">
           {/* Content Area - 65% (or full width for PDF side-by-side) */}
@@ -424,6 +425,14 @@ export default function DocumentViewPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Per-document knowledge graph (bottom of page, lazy via button) */}
+      <section className="shrink-0 border-t bg-background px-4 py-4">
+        <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
+          <Network className="h-4 w-4" /> Knowledge Graph
+        </h2>
+        <DocumentGraphPanel documentId={document.id} />
+      </section>
     </div>
   );
 }

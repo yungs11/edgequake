@@ -69,6 +69,31 @@ export async function getGraph(
   return graph;
 }
 
+/**
+ * Fetch the knowledge subgraph scoped to a single document.
+ *
+ * Mirrors {@link getGraph} (including the legacy `edge_type` normalization),
+ * but hits the document-scoped backend endpoint so only entities/relationships
+ * extracted from this document are returned.
+ */
+export async function getDocumentGraph(
+  documentId: string,
+): Promise<KnowledgeGraph> {
+  const graph = await api.get<KnowledgeGraph>(
+    `/graph/documents/${encodeURIComponent(documentId)}`,
+  );
+
+  if (graph.edges) {
+    graph.edges = graph.edges.map((e) => ({
+      ...e,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      relationship_type: e.relationship_type || (e as any).edge_type || "",
+    }));
+  }
+
+  return graph;
+}
+
 export async function getGraphLabels(): Promise<{
   entity_types: string[];
   relationship_types: string[];
