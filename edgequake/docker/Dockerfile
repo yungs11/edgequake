@@ -36,6 +36,10 @@ COPY crates/ crates/
 COPY src/ src/
 COPY migrations/ migrations/
 COPY .sqlx .sqlx/
+# WHY: root Cargo.toml has a path dependency `edgequake-llm = { path = "vendor/edgequake-llm" }`
+# (Cargo.toml:178). Without copying vendor/, `cargo build --locked` fails with
+# "failed to load source for dependency edgequake-llm / No such file or directory".
+COPY vendor/ vendor/
 # WHY: models.toml defines available LLM providers/models (gpt-5.4, claude-sonnet-4-6,
 # gemma4, etc.). The binary falls back to built-in defaults (edgequake-llm v0.5.1) which
 # only include gpt-4o and gpt-4o-mini — the new models are only in models.toml.

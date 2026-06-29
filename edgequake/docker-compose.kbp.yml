@@ -1,0 +1,100 @@
+# docker-compose.kbp.yml — kb-pipeline 전용 edgequake 기동 (핸드오프용)
+#
+# 이 compose 는 kb-pipeline 파이프라인에서 쓰는 "전용 edgequake" 를 컨테이너로 띄운다.
+#   - eq-pg-kbp : edgequake 용 Postgres (AGE 확장 포함 이미지)
+#   - edgequake : 내가 빌드해 전달한 edgequake-kbp:local 이미지 (kv.rs 수정 반영)
+# 두 컨테이너는 공유 네트워크 eqkbp-net 위에서 컨테이너명 DNS 로 연결된다.
+#
+# 사용:
+#   docker load -i edgequake-kbp-amd64.tar          # 전달받은 이미지 적재 (1회)
+#   cp .env.kbp.example .env.kbp                     # 키 입력 (1회)
+#   docker compose -f docker-compose.kbp.yml --env-file .env.kbp up -d
+#
+# ── kb-pipeline 불변식 (절대 바꾸지 말 것) ───────────────────────────────
+#   EDGEQUAKE_CHUNKER=passthrough  : 재청킹 금지. 청킹은 facade /chunk 가 소유.
+#                                    adaptive 로 띄우면 HTTP 422 적재 실패.
+#   임베딩 BGE-M3 1024d 통일        : EMBEDDING_MODEL=bge-m3, DIMENSION=1024 고정.
+#   DATABASE_URL 에 search_path=public 핀 금지 : AGE graphid 연산자 깨짐(500).
+
+networks:
+  eqkbp-net:
+    driver: bridge
+
+services:
+  eq-pg-kbp:
+    image: ghcr.io/raphaelmansuy/edgequake-postgres:latest
+    container_name: eq-pg-kbp
+    environment:
+      POSTGRES_USER: edgequake
+      POSTGRES_PASSWORD: edgequake_secret
+      POSTGRES_DB: edgequake
+    ports:
+      # 호스트에서 직접 psql 디버깅용 (선택). 컨테이너 간 통신엔 불필요.
+      - "5433:5432"
+    networks:
+      - eqkbp-net
+    healthcheck:
+      # 이 postgres 이미지는 init 단계에서 서버를 한 번 재시작한다. 그래서
+      # 단발 pg_isready 는 일시적 init 서버에 통과해버린다 → 실제 연결을
+      # 확인하는 psql SELECT 1 로 검사하고, 연속 성공해야 healthy 처리.
+      test: ["CMD-SHELL", "psql -U edgequake -d edgequake -c 'SELECT 1' >/dev/null 2>&1"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  edgequake:
+    image: edgequake-kbp:local
+    container_name: eq-kbp
+    depends_on:
+      eq-pg-kbp:
+        condition: service_healthy
+    environment:
+      # ── 서버 바인딩 ──
+      HOST: 0.0.0.0
+      PORT: "8081"
+      EDGEQUAKE_HOST: 0.0.0.0
+      EDGEQUAKE_PORT: "8081"
+
+      # ── 불변식: 전용 edgequake 는 재청킹 금지 ──
+      EDGEQUAKE_CHUNKER: passthrough
+      # passthrough 라 실제로 호출되지 않지만 런처 패리티를 위해 유지.
+      # 호스트의 adaptive_chunk(:18060) 를 가리킴 (host-gateway 매핑 사용).
+      ADAPTIVE_CHUNK_URL: http://host.docker.internal:18060
+
+      # ── DB: 컨테이너명 DNS + 내부 포트 5432 (호스트 5433 아님) ──
+      # search_path=public 핀 금지 (AGE graphid 연산자 보존).
+      DATABASE_URL: postgres://edgequake:edgequake_secret@eq-pg-kbp:5432/edgequake
+
+      # ── LLM: OpenRouter (추출/질의). COMPAT-GUARD 모델 다운그레이드 회피 위해 provider=openrouter 고정 ──
+      EDGEQUAKE_LLM_PROVIDER: openrouter
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in .env.kbp}
+      OPENAI_BASE_URL: https://openrouter.ai/api/v1
+      OPENAI_API_KEY: ${OPENROUTER_API_KEY:?set OPENROUTER_API_KEY in .env.kbp}
+      EDGEQUAKE_DEFAULT_LLM_MODEL: qwen/qwen3.5-122b-a10b
+      EDGEQUAKE_LLM_MODEL: qwen/qwen3.5-122b-a10b
+
+      # ── 임베딩: BGE-M3 1024d 통일 (litellm 경유) ──
+      EDGEQUAKE_EMBEDDING_PROVIDER: openai
+      EDGEQUAKE_EMBEDDING_BASE_URL: ${EDGEQUAKE_EMBEDDING_BASE_URL:-https://litellm.ax-demo.com/v1}
+      EDGEQUAKE_EMBEDDING_API_KEY: ${LITELLM_API_KEY:?set LITELLM_API_KEY in .env.kbp}
+      EDGEQUAKE_EMBEDDING_MODEL: bge-m3
+      EDGEQUAKE_EMBEDDING_DIMENSION: "1024"
+
+      RUST_LOG: info
+    ports:
+      # 호스트:컨테이너 — facade 등 호스트 서비스가 http://localhost:8081 로 접근
+      - "8081:8081"
+    extra_hosts:
+      # ADAPTIVE_CHUNK_URL 의 host.docker.internal 을 Linux 에서도 해석 가능하게
+      - "host.docker.internal:host-gateway"
+    networks:
+      - eqkbp-net
+    healthcheck:
+      # 이미지 기본 HEALTHCHECK 는 :8080 을 보지만 우리는 :8081 로 띄우므로 재정의
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
