@@ -95,14 +95,6 @@ impl PostgresKVStorage {
             .await
             .map_err(|e| StorageError::Database(format!("Failed to create KV table: {}", e)))?;
 
-        // Create GIN index for JSONB queries
-        let gin_sql = format!(
-            "CREATE INDEX IF NOT EXISTS eq_{}_kv_value_gin ON {} USING GIN (value)",
-            self.prefix, self.table_name
-        );
-
-        sqlx::query(&gin_sql).execute(&pool).await.ok();
-
         // SPEC-011 iter 02 Fix C: B-tree index on reverse(key) for O(log N) suffix scans.
         // Used by `keys_with_suffix`, which the workspace stats endpoint calls every 30 s
         // with `"-metadata"`. Without this index the equivalent `LIKE '%-metadata'` does
