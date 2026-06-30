@@ -58,6 +58,16 @@ impl DocumentTaskProcessor {
             .unwrap_or("markdown") // Default to markdown for text uploads
             .to_string();
 
+        // Per-document graph-extraction skip flag (e.g. Excel documents that are
+        // vector-only). When true, the LLM entity/relationship extraction sub-step
+        // is bypassed; chunking and chunk embeddings still run (vector search intact).
+        let skip_graph_extraction = data
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("skip_graph_extraction"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
         // OODA-05: Extract tenant_id from metadata for multi-tenant visibility
         let tenant_id = data
             .metadata
@@ -414,12 +424,13 @@ impl DocumentTaskProcessor {
 
             // No valid checkpoint — run the full pipeline
             let fresh_result = match pipeline
-                .process_with_resilience_cancellable(
+                .process_with_resilience_cancellable_opts(
                     &document_id,
                     &processed_text,
                     Some(chunk_progress_callback),
                     Some(cancel_token.clone()),
                     Some(embed_progress_callback),
+                    skip_graph_extraction,
                 )
                 .await
             {
@@ -1030,6 +1041,20 @@ impl DocumentTaskProcessor {
                 "CRITICAL: Document chunking produced 0 chunks - marking as failed"
             );
             "failed"
+        } else if result.stats.entity_count == 0
+            && result.stats.chunk_count > 0
+            && skip_graph_extraction
+        {
+            // Graph extraction was intentionally skipped for this document
+            // (e.g. Excel vector-only ingest). 0 entities is the expected outcome,
+            // not a failure — chunks are stored and searchable. Mark completed so
+            // the facade document_phase poll sees success instead of partial_failure.
+            info!(
+                document_id = %document_id,
+                chunk_count = result.stats.chunk_count,
+                "Graph extraction skipped (skip_graph_extraction=true) - 0 entities expected, marking as completed",
+            );
+            "completed"
         } else if result.stats.entity_count == 0 && result.stats.chunk_count > 0 {
             // Pipeline created chunks but extracted 0 entities - likely LLM failure
             warn!(

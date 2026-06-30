@@ -128,13 +128,43 @@ impl Pipeline {
         cancel_token: Option<CancellationToken>,
         embed_progress: Option<EmbedProgressCallback>,
     ) -> Result<ProcessingResult> {
+        self.process_with_resilience_cancellable_opts(
+            document_id,
+            content,
+            progress_callback,
+            cancel_token,
+            embed_progress,
+            false,
+        )
+        .await
+    }
+
+    /// Process a document with resilient chunk-level error handling and
+    /// cooperative cancellation support, with the ability to skip the
+    /// (entity/relationship) extraction sub-step on a per-document basis.
+    ///
+    /// When `skip_extraction` is `true`, only the LLM extraction sub-block is
+    /// bypassed — chunking (`chunk_async`) and `finish_document_processing`
+    /// (chunk embeddings, lineage) still run, so the document remains fully
+    /// vector-searchable. `extractions` stays an empty Vec and entity_count is 0.
+    pub async fn process_with_resilience_cancellable_opts(
+        &self,
+        document_id: &str,
+        content: &str,
+        progress_callback: Option<ChunkProgressCallback>,
+        cancel_token: Option<CancellationToken>,
+        embed_progress: Option<EmbedProgressCallback>,
+        skip_extraction: bool,
+    ) -> Result<ProcessingResult> {
         let start = Instant::now();
 
         let chunks = self.chunker.chunk_async(content, document_id).await?;
         let mut stats = self.init_chunk_stats(&chunks);
 
         let mut extractions = Vec::new();
-        if self.config.enable_entity_extraction || self.config.enable_relationship_extraction {
+        if (self.config.enable_entity_extraction || self.config.enable_relationship_extraction)
+            && !skip_extraction
+        {
             if let Some(extractor) = &self.extractor {
                 let resilient_result = self
                     .resilient_extract_parallel(

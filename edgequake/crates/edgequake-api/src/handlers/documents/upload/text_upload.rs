@@ -223,16 +223,38 @@ pub async fn upload_document(
         let workspace_id = tenant_ctx.workspace_id_or_default();
         let tenant_id = tenant_ctx.tenant_id_or_default();
 
+        // Build the base task metadata. The 4 keys below are protected:
+        // text_insert reads document_id/tenant_id/workspace_id for tenant scoping,
+        // so a caller-supplied metadata object must NOT be able to override them.
+        let mut task_metadata = serde_json::json!({
+            "document_id": document_id,
+            "title": request.title,
+            "tenant_id": tenant_id,
+            "workspace_id": workspace_id,
+        });
+
+        // Merge caller-supplied request.metadata into the base object, but ONLY
+        // when it is present and a JSON object. Protected base keys win on
+        // conflict; any other user keys (e.g. skip_graph_extraction) are added.
+        // Without this merge the per-document skip signal never reaches the pipeline.
+        if let Some(serde_json::Value::Object(user_meta)) = request.metadata.as_ref() {
+            if let Some(base_obj) = task_metadata.as_object_mut() {
+                const PROTECTED_KEYS: [&str; 4] =
+                    ["document_id", "title", "tenant_id", "workspace_id"];
+                for (k, v) in user_meta {
+                    if PROTECTED_KEYS.contains(&k.as_str()) {
+                        continue;
+                    }
+                    base_obj.insert(k.clone(), v.clone());
+                }
+            }
+        }
+
         let task_data = TextInsertData {
             text: request.content.clone(),
             file_source: request.title.clone().unwrap_or_else(|| document_id.clone()),
             workspace_id: workspace_id.clone(),
-            metadata: Some(serde_json::json!({
-                "document_id": document_id,
-                "title": request.title,
-                "tenant_id": tenant_id,
-                "workspace_id": workspace_id,
-            })),
+            metadata: Some(task_metadata),
         };
 
         let task = Task::new(
