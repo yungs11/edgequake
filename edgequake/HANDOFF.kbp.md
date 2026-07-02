@@ -89,6 +89,34 @@ docker compose -f docker-compose.kbp.yml --env-file .env.kbp up -d
 
 ---
 
+## 7. WebUI 보기 (localhost:3003)
+
+edgequake 관리 화면은 **`edgequake_webui`** (Next.js 16) 다.
+(마케팅 사이트 `edgequake-website` 는 Astro 기반의 별개 프로젝트 — 관리 UI 아님.)
+
+> `next dev` 기본 포트는 **3000** 이므로, `:3003` 으로 보려면 포트를 명시해야 한다.
+> 브라우저 API 호출은 dev proxy(`/api`, `/health`, `/ws` → 기본 `http://127.0.0.1:8081`)
+> 로 백엔드 edgequake 에 붙으므로 **위 4~5 단계로 edgequake(:8081)가 먼저 떠 있어야** 데이터가 보인다.
+
+```bash
+cd edgequake_webui
+npm install            # 최초 1회 (Node 20+; node_modules 없을 때)
+PORT=3003 npm run dev  # 또는: npx next dev -p 3003
+```
+
+브라우저에서 `http://localhost:3003` 접속.
+
+- 백엔드가 `:8081` 이 아니면 프록시 타깃을 바꾼다:
+  `EDGEQUAKE_API_URL=http://127.0.0.1:<port> PORT=3003 npm run dev`
+- `.env.local` 은 `.env.local.example` 복사해서 쓴다(로컬 dev 는 `NEXT_PUBLIC_API_URL` 비워둠 — 프록시가 처리).
+
+| 증상 | 원인 / 조치 |
+|---|---|
+| UI 는 뜨는데 문서/그래프가 비어 있음 | 백엔드 edgequake(:8081) 미기동 또는 프록시 타깃 불일치. `curl -f http://localhost:8081/health` 확인. |
+| 포트가 3000 으로 뜸 | `PORT=3003` 누락. `PORT=3003 npm run dev` 로 재실행. |
+
+---
+
 ## 절대 바꾸지 말 것 (kb-pipeline 불변식)
 
 compose 에 이미 박혀 있다. 임의 수정 시 적재/검색이 깨진다.
