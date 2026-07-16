@@ -89,6 +89,10 @@ impl LLMKeywordExtractor {
         format!(
             r#"Extract high-level and low-level keywords from the following query, and classify the query intent.
 
+## CRITICAL: Language Preservation
+Output keywords in the **SAME LANGUAGE as the query**. If the query is Korean, output Korean keywords; do NOT translate to English. The knowledge graph entities are stored in the document's original language, so translated keywords will not match.
+(예: 한국어 질의 "소유권이전 절차는?" → 키워드 "소유권이전", "절차" — NOT "ownership transfer", "procedure")
+
 ## Definitions
 
 **High-level keywords**: Abstract concepts, themes, or topics that represent the broader context or domain of the query. These are used to find relevant relationships and global patterns in a knowledge graph.
@@ -143,6 +147,13 @@ Query: "Compare Python and Rust for systems programming"
   "high_level_keywords": ["programming languages", "systems programming", "language comparison"],
   "low_level_keywords": ["Python", "Rust", "performance", "memory safety", "type system"],
   "query_intent": "comparative"
+}}
+
+Query: "소유권이전 업무 프로세스는 어떻게 되나요?"
+{{
+  "high_level_keywords": ["소유권이전", "업무 프로세스", "절차"],
+  "low_level_keywords": ["위탁자", "수분양자", "분양대금", "등기위임장", "기안"],
+  "query_intent": "procedural"
 }}
 
 Now extract keywords from the query above. Respond with JSON only:"#

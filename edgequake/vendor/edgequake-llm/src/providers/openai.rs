@@ -390,6 +390,61 @@ impl OpenAIProvider {
             _ => None,
         }
     }
+
+    /// reasoning 비활성화 여부(env `EDGEQUAKE_LLM_DISABLE_REASONING`, 기본 on).
+    /// qwen3.5 등 reasoning 모델이 키워드추출·간단 질의에 수천 토큰의 <think> 를 생성해
+    /// 30-55s 걸리는 문제(2026-07-16 실측). OpenRouter 확장 `reasoning:{enabled:false}` 로 끈다.
+    fn reasoning_disabled() -> bool {
+        std::env::var("EDGEQUAKE_LLM_DISABLE_REASONING")
+            .map(|v| !matches!(v.trim().to_lowercase().as_str(), "0" | "false" | "off" | ""))
+            .unwrap_or(true)
+    }
+
+    /// async-openai 로 build 한 chat request 를, reasoning 비활성화가 필요하면 raw HTTP 로
+    /// 보낸다(async-openai 0.33 은 OpenRouter `reasoning` 확장 필드를 직렬화 못 함). 응답은
+    /// async-openai 타입으로 역직렬화해 기존 파싱 로직을 그대로 재사용.
+    async fn create_chat_with_reasoning_control(
+        &self,
+        request: async_openai::types::chat::CreateChatCompletionRequest,
+    ) -> Result<async_openai::types::chat::CreateChatCompletionResponse> {
+        if !Self::reasoning_disabled() {
+            return Ok(self.client.chat().create(request).await?);
+        }
+        // reasoning 끄기: request → JSON → reasoning 주입 → raw POST.
+        let mut body = serde_json::to_value(&request)
+            .map_err(|e| LlmError::InvalidRequest(format!("serialize request: {e}")))?;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("reasoning".to_string(), serde_json::json!({"enabled": false}));
+        }
+        let base_url = if self.raw_base_url.is_empty() {
+            "https://api.openai.com/v1".to_string()
+        } else {
+            self.raw_base_url.trim_end_matches('/').to_string()
+        };
+        let url = format!("{}/chat/completions", base_url);
+        let http_client = reqwest::Client::new();
+        let mut req = http_client.post(&url).json(&body);
+        if !self.raw_api_key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", self.raw_api_key));
+        }
+        let resp = req.send().await.map_err(|e| {
+            LlmError::NetworkError(format!("chat request failed: {e}"))
+        })?;
+        let status = resp.status();
+        let text = resp
+            .text()
+            .await
+            .map_err(|e| LlmError::NetworkError(format!("read chat response: {e}")))?;
+        if !status.is_success() {
+            return Err(LlmError::ApiError(format!(
+                "Chat API returned {}: {}",
+                status.as_u16(),
+                text
+            )));
+        }
+        serde_json::from_str(&text)
+            .map_err(|e| LlmError::ApiError(format!("parse chat response: {e} — body: {text}")))
+    }
 }
 
 #[async_trait]
@@ -472,7 +527,7 @@ impl LLMProvider for OpenAIProvider {
             .build()
             .map_err(|e| LlmError::InvalidRequest(e.to_string()))?;
 
-        let response = self.client.chat().create(request).await?;
+        let response = self.create_chat_with_reasoning_control(request).await?;
 
         // Debug logging for token tracking
         debug!(
@@ -599,7 +654,7 @@ impl LLMProvider for OpenAIProvider {
             .build()
             .map_err(|e| LlmError::InvalidRequest(e.to_string()))?;
 
-        let response = self.client.chat().create(request).await?;
+        let response = self.create_chat_with_reasoning_control(request).await?;
 
         debug!(
             "OpenAI chat_with_tools response id={} model={}",
