@@ -131,6 +131,27 @@ struct ChatRequest<'a> {
     tools: Option<Vec<RequestTool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<serde_json::Value>,
+    /// OpenRouter reasoning 제어. qwen3.5 등 reasoning 모델이 간단 질의에 수천 토큰의
+    /// <think> 를 생성해 30-55s 걸리는 문제(2026-07-16 실측) 회피용 `{"enabled": false}`.
+    /// `EDGEQUAKE_LLM_DISABLE_REASONING`(기본 on) 일 때 세팅.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<serde_json::Value>,
+}
+
+/// reasoning 비활성화 여부(env, 기본 on). false/0/off/빈값이면 끄지 않음.
+fn reasoning_disabled_env() -> bool {
+    std::env::var("EDGEQUAKE_LLM_DISABLE_REASONING")
+        .map(|v| !matches!(v.trim().to_lowercase().as_str(), "0" | "false" | "off" | ""))
+        .unwrap_or(true)
+}
+
+/// reasoning 필드 값 — 비활성화면 `{"enabled": false}`, 아니면 None(필드 생략).
+fn reasoning_field() -> Option<serde_json::Value> {
+    if reasoning_disabled_env() {
+        Some(serde_json::json!({"enabled": false}))
+    } else {
+        None
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -1144,6 +1165,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: options.presence_penalty,
             tools: None,
             tool_choice: None,
+            reasoning: reasoning_field(),
         };
 
         let response = self.send_request(&request).await?;
@@ -1172,6 +1194,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: options.presence_penalty,
             tools: Some(Self::convert_tools(tools)),
             tool_choice: tool_choice.map(|tc| Self::convert_tool_choice(&tc)),
+            reasoning: reasoning_field(),
         };
 
         let response = self.send_request(&request).await?;
@@ -1194,6 +1217,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: None,
             tools: None,
             tool_choice: None,
+            reasoning: reasoning_field(),
         };
 
         let request_body = serde_json::to_string(&request)
@@ -1290,6 +1314,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: options.presence_penalty,
             tools: Some(Self::convert_tools(tools)),
             tool_choice: tool_choice.map(|tc| Self::convert_tool_choice(&tc)),
+            reasoning: reasoning_field(),
         };
 
         let request_body = serde_json::to_string(&request)
@@ -1876,6 +1901,7 @@ mod tests {
             presence_penalty: Some(-0.3),
             tools: None,
             tool_choice: None,
+            reasoning: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(
@@ -1904,6 +1930,7 @@ mod tests {
             presence_penalty: None,
             tools: None,
             tool_choice: None,
+            reasoning: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(

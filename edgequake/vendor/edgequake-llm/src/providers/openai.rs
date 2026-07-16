@@ -408,6 +408,7 @@ impl OpenAIProvider {
         request: async_openai::types::chat::CreateChatCompletionRequest,
     ) -> Result<async_openai::types::chat::CreateChatCompletionResponse> {
         if !Self::reasoning_disabled() {
+            debug!("reasoning control: DISABLED via env — using async-openai path");
             return Ok(self.client.chat().create(request).await?);
         }
         // reasoning 끄기: request → JSON → reasoning 주입 → raw POST.
@@ -416,6 +417,10 @@ impl OpenAIProvider {
         if let Some(obj) = body.as_object_mut() {
             obj.insert("reasoning".to_string(), serde_json::json!({"enabled": false}));
         }
+        tracing::info!(
+            model = %self.model,
+            "reasoning-off raw HTTP chat request (reasoning:{{enabled:false}})"
+        );
         let base_url = if self.raw_base_url.is_empty() {
             "https://api.openai.com/v1".to_string()
         } else {
