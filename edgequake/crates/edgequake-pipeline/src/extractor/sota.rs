@@ -32,13 +32,22 @@ where
     L: edgequake_llm::LLMProvider + ?Sized,
 {
     /// Create a new SOTA extractor with default settings.
+    ///
+    /// 추출 출력 언어(엔티티명·키워드·설명)는 `EDGEQUAKE_EXTRACTION_LANGUAGE` env 로 결정한다
+    /// (미설정 시 "English"). 한글 문서 배포는 "Korean" 으로 설정 — 미설정 시 프롬프트가
+    /// 모든 엔티티/관계 설명을 영어로 강제해 그래프가 영어로 저장되던 문제(2026-07-16 실관측).
+    /// `new()` 가 유일 생성자라 이 기본값이 전 구성 경로를 커버.
     pub fn new(llm_provider: std::sync::Arc<L>) -> Self {
+        let language = std::env::var("EDGEQUAKE_EXTRACTION_LANGUAGE")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "English".to_string());
         Self {
             llm_provider,
             entity_schema: crate::prompts::EntityExtractionSchema::server_default(),
             prompts: crate::prompts::EntityExtractionPrompts::default(),
             parser: crate::prompts::HybridExtractionParser::new(true),
-            language: "English".to_string(),
+            language,
         }
     }
 }
