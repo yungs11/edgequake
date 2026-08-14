@@ -103,15 +103,34 @@ use sqlx::PgPool;
 
 // ── Shared Utility ────────────────────────────────────────────────────────
 
-/// Create the configured BM25 reranker.
+/// Create the configured reranker.
 ///
-/// Enhanced mode (default) adds:
-/// - Porter2 stemming: "running" matches "run", "runner"
-/// - NFKD Unicode normalization: "café" matches "cafe"
-/// - Stop word filtering: Removes noise words like "the", "and"
+/// **신경망 리랭커 우선**(2026-07-21): `EDGEQUAKE_RERANK_BASE_URL` 이 설정되면 HTTP 신경망
+/// 리랭커(Qwen3-Reranker 등)를 쓴다. BM25(키워드 매칭)는 "이사"↔"거주지 이전" 같은 동의어를
+/// 0.0 으로 컷해 벡터가 회수한 정답 청크를 죽이는 문제가 있어(실측), 의미 기반 신경망으로 교체.
+/// 모델/URL/키는 **하드코딩 금지 — env 로만** 주입:
+///   EDGEQUAKE_RERANK_BASE_URL   (예: https://litellm.ax-demo.com/v1/rerank) — 미설정 시 BM25 폴백
+///   EDGEQUAKE_RERANK_MODEL      (예: Qwen3-Reranker-0.6B)
+///   EDGEQUAKE_RERANK_API_KEY
 ///
-/// Set `BM25_ENHANCED=false` to disable enhanced features.
+/// BM25 폴백(URL 미설정): `BM25_ENHANCED=false` 면 minimal, 아니면 enhanced(stemming/정규화).
 fn create_bm25_reranker() -> Arc<dyn edgequake_llm::Reranker> {
+    if let Ok(base_url) = std::env::var("EDGEQUAKE_RERANK_BASE_URL") {
+        if !base_url.trim().is_empty() {
+            let model = std::env::var("EDGEQUAKE_RERANK_MODEL")
+                .unwrap_or_else(|_| "Qwen3-Reranker-0.6B".to_string());
+            let api_key = std::env::var("EDGEQUAKE_RERANK_API_KEY").ok().filter(|s| !s.is_empty());
+            tracing::info!(model = %model, base_url = %base_url,
+                "Using HTTP neural reranker (semantic, 동의어 인식)");
+            let config = edgequake_llm::reranker::RerankConfig {
+                model,
+                base_url,
+                api_key,
+                ..Default::default()
+            };
+            return Arc::new(edgequake_llm::reranker::HttpReranker::new(config));
+        }
+    }
     if std::env::var("BM25_ENHANCED").unwrap_or_default() == "false" {
         tracing::info!("Using minimal BM25 reranker (BM25_ENHANCED=false)");
         Arc::new(edgequake_llm::reranker::BM25Reranker::new())

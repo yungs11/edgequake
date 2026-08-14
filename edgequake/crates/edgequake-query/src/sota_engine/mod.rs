@@ -171,9 +171,20 @@ impl Default for SOTAQueryConfig {
             },
             keyword_cache_ttl_secs: 24 * 60 * 60, // 24 hours
             enable_rerank: true,                  // Enable by default for SOTA quality
-            // WHY 0.1: BM25 scores can be low for short documents or simple queries.
-            // 0.3 was too aggressive and filtered out valid chunks. 0.1 matches min_score.
-            min_rerank_score: 0.1,
+            // Configurable via EDGEQUAKE_MIN_RERANK_SCORE env var (default: 0.1).
+            // WHY 0.1 default: BM25 scores can be low for short documents or simple
+            // queries. 0.3 was too aggressive and filtered valid chunks. 0.1 matches min_score.
+            // WHY env-configurable + set 0.0 in deploy: with a neural reranker, a long
+            // multi-topic chunk (e.g. 청원휴가 with several sub-conditions) gets its target
+            // line ("거주지 이전시 : 1일") diluted and scores below 0.1, while noise chunks
+            // that merely contain a query keyword ("휴가") score higher — so the 0.1 FLOOR
+            // drops the correct answer. When the candidate set fits the downstream token
+            // budget (truncation caps by max_total_tokens anyway), the reranker should
+            // REORDER, not FILTER; 0.0 keeps all reranked chunks ordered by relevance.
+            min_rerank_score: std::env::var("EDGEQUAKE_MIN_RERANK_SCORE")
+                .ok()
+                .and_then(|v| v.parse::<f32>().ok())
+                .unwrap_or(0.1),
             // WHY 20: Match max_chunks to keep all chunk candidates after reranking.
             rerank_top_k: 20,
         }
