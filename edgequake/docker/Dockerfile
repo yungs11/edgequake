@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # EdgeQuake Dockerfile
 # Multi-stage build for minimal image size
 # Multi-platform: supports linux/amd64, linux/arm64 (macOS Apple Silicon, AWS Graviton, etc.)
@@ -51,11 +52,19 @@ COPY models.toml models.toml
 # Set ENABLE_OTEL=true to compile OTLP trace export (requires OTEL_EXPORTER_OTLP_ENDPOINT at runtime).
 ARG ENABLE_OTEL=false
 ENV SQLX_OFFLINE=true
-RUN if [ "$ENABLE_OTEL" = "true" ]; then \
+# cargo 빌드 캐시 마운트(2026-07-21) — registry(다운로드)와 target(증분 컴파일 산출물)을
+# 레이어 밖 캐시에 보존한다. 없으면 소스 한 줄 변경이 COPY crates/ 레이어를 무효화해
+# aws-sdk 등 전 의존성을 매번 처음부터 재컴파일(십수 분). 캐시 마운트 target 은 이미지
+# 레이어에 남지 않으므로, 빌드 직후 바이너리를 캐시 밖(/out)으로 복사해 Stage 2 가 집게 한다.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    mkdir -p /out && \
+    if [ "$ENABLE_OTEL" = "true" ]; then \
       cargo build --release --locked --features "postgres,vision,otel"; \
     else \
       cargo build --release --locked; \
-    fi
+    fi && \
+    cp /app/target/release/edgequake /out/edgequake
 
 # ============================================
 # Stage 2: Runtime
@@ -84,7 +93,7 @@ RUN apt-get update && apt-get install -y \
 ENV PDFIUM_AUTO_CACHE_DIR=/tmp/edgequake-pdfium-cache
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/edgequake /usr/local/bin/
+COPY --from=builder /out/edgequake /usr/local/bin/
 # Copy models.toml so the runtime binary finds up-to-date models at ./models.toml
 # (CWD=/app, see WORKDIR above). Without this, the binary falls back to the compiled-in
 # defaults which lack the v0.9.8 models (gpt-5.4, claude-sonnet-4-6, gemma4).
