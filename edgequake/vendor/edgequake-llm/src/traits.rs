@@ -543,6 +543,16 @@ pub struct CompletionOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
 
+    /// Per-call reasoning override (provider-agnostic on/off).
+    ///
+    /// When set, takes precedence over the global `EDGEQUAKE_LLM_DISABLE_REASONING`
+    /// env for providers that honor it (OpenRouter): `Some(true)` forces reasoning
+    /// ON for this call (entity/relation extraction — 관계 추출은 추론 사용), `Some(false)`
+    /// forces OFF, `None` falls back to the global env (chat/query default OFF).
+    /// Left unset by default so existing callers are unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub force_reasoning: Option<bool>,
+
     /// Response format (e.g., "json").
     pub response_format: Option<String>,
 

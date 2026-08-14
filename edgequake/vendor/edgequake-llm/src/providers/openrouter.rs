@@ -154,6 +154,18 @@ fn reasoning_field() -> Option<serde_json::Value> {
     }
 }
 
+/// per-call reasoning 결정 — options.force_reasoning 가 있으면 우선(추출=ON), 없으면 전역 env.
+///
+/// 추출(엔티티/관계) 경로는 `force_reasoning=Some(true)` 로 reasoning ON(관계 뽑을 때 추론).
+/// chat/query(키워드추출·검색·합성)는 force_reasoning 미지정 → 전역 env(기본 off, 검색 병목 회피).
+fn reasoning_for(options: &CompletionOptions) -> Option<serde_json::Value> {
+    match options.force_reasoning {
+        Some(true) => Some(serde_json::json!({"enabled": true})),
+        Some(false) => Some(serde_json::json!({"enabled": false})),
+        None => reasoning_field(),
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct RequestMessage {
     role: String,
@@ -1165,7 +1177,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: options.presence_penalty,
             tools: None,
             tool_choice: None,
-            reasoning: reasoning_field(),
+            reasoning: reasoning_for(&options),
         };
 
         let response = self.send_request(&request).await?;
@@ -1194,7 +1206,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: options.presence_penalty,
             tools: Some(Self::convert_tools(tools)),
             tool_choice: tool_choice.map(|tc| Self::convert_tool_choice(&tc)),
-            reasoning: reasoning_field(),
+            reasoning: reasoning_for(&options),
         };
 
         let response = self.send_request(&request).await?;
@@ -1204,6 +1216,8 @@ impl LLMProvider for OpenRouterProvider {
     #[instrument(skip(self, prompt))]
     async fn stream(&self, prompt: &str) -> Result<BoxStream<'static, Result<String>>> {
         let messages = vec![ChatMessage::user(prompt)];
+        // 스트리밍(chat/query)은 per-call override 없음 → 전역 env(기본 off).
+        let options = CompletionOptions::default();
 
         let request = ChatRequest {
             model: &self.model,
@@ -1217,7 +1231,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: None,
             tools: None,
             tool_choice: None,
-            reasoning: reasoning_field(),
+            reasoning: reasoning_for(&options),
         };
 
         let request_body = serde_json::to_string(&request)
@@ -1314,7 +1328,7 @@ impl LLMProvider for OpenRouterProvider {
             presence_penalty: options.presence_penalty,
             tools: Some(Self::convert_tools(tools)),
             tool_choice: tool_choice.map(|tc| Self::convert_tool_choice(&tc)),
-            reasoning: reasoning_field(),
+            reasoning: reasoning_for(&options),
         };
 
         let request_body = serde_json::to_string(&request)
