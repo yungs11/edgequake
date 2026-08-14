@@ -88,5 +88,9 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1
 
-# Start Next.js server
-CMD ["pnpm", "start"]
+# Start Next.js server.
+# 폐쇄망 주의: `pnpm start` 로 띄우면 package.json 의 `packageManager: pnpm@10.13.1` 핀과
+# 전역 pnpm 버전이 달라 pnpm 이 registry.npmjs.org 에서 그 버전을 **자기설치**하려다
+# (ERR_PNPM_META_FETCH_FAIL / EAI_AGAIN) 기동에 실패한다. node_modules 는 이미 구워져
+# 있으므로 pnpm 을 거치지 않고 next 를 직접 실행한다(런타임 네트워크 0).
+CMD ["node_modules/.bin/next", "start"]
